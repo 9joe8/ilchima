@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // User Helpers
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'meritPoints']) &&
+             data.keys().size() == 4 &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.email is string && data.email == request.auth.token.email &&
+             data.meritPoints is int;
+    }
+
+    // Item Helpers
+    function isValidItem(data) {
+      return data.keys().hasAll(['id', 'title', 'description', 'category', 'locationFound', 'dateFound', 'finderId', 'finderName', 'status', 'meritClaimed']) &&
+             data.keys().size() == 10 &&
+             data.id is string && data.id.size() <= 64 &&
+             data.title is string && data.title.size() <= 100 &&
+             data.description is string && data.description.size() <= 2000 &&
+             data.category is string && data.category.size() <= 50 &&
+             data.locationFound is string && data.locationFound.size() <= 100 &&
+             data.dateFound is string && // Assuming ISO string for simplicity or use timestamp if preferred
+             data.finderId is string && data.finderId == request.auth.uid &&
+             data.finderName is string && data.finderName.size() <= 100 &&
+             data.status in ['available', 'returned'] &&
+             data.meritClaimed is bool;
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isSignedIn() && request.auth.uid == userId && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['meritPoints', 'displayName']) &&
+        incoming().meritPoints >= existing().meritPoints; // Only allow incrementing
+    }
+
+    match /items/{itemId} {
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(itemId) && isValidItem(incoming());
+      allow update: if isSignedIn() && (
+        // Action: Mark as Returned (only by finder)
+        (existing().finderId == request.auth.uid && 
+         existing().status == 'available' &&
+         incoming().status == 'returned' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['status', 'meritClaimed'])) ||
+        // Action: Edit Detail (only by finder, only if available)
+        (existing().finderId == request.auth.uid && 
+         existing().status == 'available' &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'locationFound']))
+      ) && isValidItem(incoming());
+      
+      allow delete: if false; // School items should probably not be deleted by students for audit
+    }
+  }
+}

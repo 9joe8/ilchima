@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Student profile on the platform",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "meritPoints": { "type": "integer" }
+      },
+      "required": ["uid", "displayName", "email", "meritPoints"]
+    },
+    "Item": {
+      "title": "Item",
+      "description": "A lost item reported by a student",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "locationFound": { "type": "string" },
+        "dateFound": { "type": "string", "format": "date-time" },
+        "finderId": { "type": "string" },
+        "finderName": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["available", "returned"]
+        },
+        "meritClaimed": { "type": "boolean" }
+      },
+      "required": ["id", "title", "description", "category", "locationFound", "dateFound", "finderId", "finderName", "status", "meritClaimed"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "items/{itemId}": {
+      "schema": "Item",
+      "description": "Lost items collection"
+    }
+  }
+}
